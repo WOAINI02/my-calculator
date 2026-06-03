@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7c2d12">
+<link rel="manifest" href="manifest.webmanifest">
+<title>下注单自动核算APP</title>
+<style>
+:root{--bg:#f8fafc;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--main:#7c2d12;--green:#047857;--red:#b91c1c;--blue:#1d4ed8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif;color:var(--text)}
+.app{max-width:780px;margin:0 auto;padding:14px 14px 92px}
+.header{background:linear-gradient(180deg,#9a3412,#7c2d12);color:white;margin:-14px -14px 14px;padding:18px 14px 14px;border-radius:0 0 18px 18px;position:sticky;top:0;z-index:2}
+.header h1{font-size:22px;margin:0 0 6px}
+.header p{font-size:13px;margin:0;color:#ffedd5}
+.card{background:white;border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+label{font-size:13px;font-weight:700;display:block;margin:9px 0 5px}
+input,select,textarea{width:100%;font-size:16px;padding:12px;border:1px solid #d1d5db;border-radius:12px;background:white}
+textarea{min-height:240px;line-height:1.45}
+button{width:100%;border:0;border-radius:14px;padding:14px;font-size:16px;font-weight:800;margin-top:10px;color:white;background:var(--main)}
+button.green{background:var(--green)}
+button.red{background:var(--red)}
+button.gray{background:#4b5563}
+button.blue{background:var(--blue)}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpi{background:#f9fafb;border:1px solid var(--line);border-radius:14px;padding:12px}
+.kpi span{font-size:12px;color:var(--muted)}
+.kpi b{display:block;font-size:22px;margin-top:4px}
+.win{color:var(--green)}.lose{color:var(--red)}
+.mini{font-size:12px;color:var(--muted);line-height:1.5}
+.tabs{position:fixed;bottom:0;left:0;right:0;max-width:780px;margin:0 auto;display:flex;background:white;border-top:1px solid var(--line);z-index:3}
+.tab{flex:1;text-align:center;padding:11px 4px 14px;color:var(--muted);font-size:13px}
+.tab.active{color:var(--main);font-weight:800}
+.hidden{display:none}
+table{border-collapse:collapse;width:100%;font-size:13px;background:white}
+th,td{border:1px solid var(--line);padding:7px;text-align:left;vertical-align:top}
+th{background:#f3f4f6}
+.scroll{overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:10px}
+.badge{font-size:12px;border-radius:999px;padding:3px 8px;background:#eef2ff;color:#3730a3;white-space:nowrap}
+.badge.hit{background:#dcfce7;color:#166534}.badge.miss{background:#fee2e2;color:#991b1b}.badge.warn{background:#fef3c7;color:#92400e}
+.historyItem{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0;background:white}
+.filebox{border:2px dashed #cbd5e1;border-radius:14px;padding:14px;background:#f8fafc;text-align:center}
+.code{background:#111827;color:#e5e7eb;border-radius:12px;padding:12px;white-space:pre-wrap;font-size:13px;overflow:auto}
+@media(max-width:430px){.row,.row3,.kpis{grid-template-columns:1fr}.tab{font-size:12px}th,td{font-size:12px;padding:6px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>下注单自动核算APP</h1>
+    <p>整张下注单粘贴/导入，填开奖号码，自动拆单、算总数、中奖、反水、输赢</p>
+  </div>
+
+  <section id="page-calc">
+    <div class="card">
+      <label>整张下注单</label>
+      <textarea id="betText">6 5 16 17 11 22 21 各150
+3 4 10 09 14 15 20 各300
+特码蓝波各数350
+特码鼠猴龙羊鸡各数100，猪各数300
+17 05 41 29 11 01 33 09 06 47 十不中3000
+猪鸡鼠马龙复三连各300，复四200，五连200
+二中二马拖龙各200
+10 20 04 14 22 各250
+02 12 24 30 40 32 34 44 42 各100</textarea>
+      <div class="filebox">
+        <input id="fileInput" type="file" accept=".txt,.csv,text/plain,text/csv" onchange="loadTextFile(this.files[0])">
+        <p class="mini">也可以选择TXT/CSV文件导入整张下注单。图片OCR先不做，容易错。</p>
+      </div>
+      <label>开奖号码</label>
+      <input id="openText" value="03 12 25 31 42 08 + 17" placeholder="03 12 25 31 42 08 + 17">
+      <button class="green" onclick="safeCalc()">自动解析并计算</button>
+      <button class="blue" onclick="exportResultCSV()">导出结果CSV</button>
+      <button class="gray" onclick="clearAll()">清空</button>
+    </div>
+
+    <div id="result" class="card hidden"></div>
+  </section>
+
+  <section id="page-settings" class="hidden">
+    <div class="card">
+      <h2 style="font-size:18px;margin:0 0 8px">赔率设置</h2>
+      <div class="row3">
+        <label>特码号码<input id="oddsTema" value="47" type="number" step="0.01"></label>
+        <label>波色<input id="oddsColor" value="2.9" type="number" step="0.01"></label>
+        <label>特肖<input id="oddsTeSx" value="11" type="number" step="0.01"></label>
+        <label>十不中<input id="oddsTenNo" value="5" type="number" step="0.01"></label>
+        <label>二中二<input id="odds2in2" value="4" type="number" step="0.01"></label>
+        <label>三连肖<input id="odds3x" value="11" type="number" step="0.01"></label>
+        <label>四连肖<input id="odds4x" value="30" type="number" step="0.01"></label>
+        <label>五连肖<input id="odds5x" value="100" type="number" step="0.01"></label>
+      </div>
+      <h2 style="font-size:18px;margin:16px 0 8px">分玩法反水%</h2>
+      <div class="row3">
+        <label>特码单号<input id="rebateTema" value="0" type="number" step="0.01"></label>
+        <label>波色<input id="rebateColor" value="0" type="number" step="0.01"></label>
+        <label>生肖/特肖<input id="rebateSx" value="0" type="number" step="0.01"></label>
+        <label>十不中<input id="rebateTenNo" value="0" type="number" step="0.01"></label>
+        <label>二中二<input id="rebate2in2" value="0" type="number" step="0.01"></label>
+        <label>三连肖<input id="rebate3x" value="0" type="number" step="0.01"></label>
+        <label>四连肖<input id="rebate4x" value="0" type="number" step="0.01"></label>
+        <label>五连肖<input id="rebate5x" value="0" type="number" step="0.01"></label>
+        <label>未识别/其他<input id="rebateOther" value="0" type="number" step="0.01"></label>
+      </div>
+      <label>派彩算法</label>
+      <select id="payoutMode">
+        <option value="includeStake">赔率含本金：派彩 = 本金 × 赔率</option>
+        <option value="profitOnly">赔率不含本金：派彩 = 本金 × 赔率 + 本金</option>
+      </select>
+      <label>反水算法</label>
+      <select id="rebateMode">
+        <option value="stake">按各玩法投注额反水</option>
+        <option value="losingStake">只按未中奖投注额反水</option>
+      </select>
+      <label>波色各数算法</label>
+      <select id="colorMode">
+        <option value="expandTema">展开成16个号码，每号按特码赔率</option>
+        <option value="singleColor">当作1注波色，按波色赔率</option>
+      </select>
+      <label>生肖各数算法</label>
+      <select id="sxMode">
+        <option value="expandTema">展开成生肖号码，每号按特码赔率</option>
+        <option value="teSx">当作特肖，按特肖赔率</option>
+      </select>
+      <label>十不中判断范围</label>
+      <select id="tenNoRange">
+        <option value="seven">看全部7个开奖号</option>
+        <option value="tema">只看特码</option>
+      </select>
+      <label>二中二/连肖判断范围</label>
+      <select id="comboRange">
+        <option value="seven">看全部7个开奖号</option>
+        <option value="ping">只看6个平码</option>
+      </select>
+      <button onclick="saveSettings()">保存设置</button>
+      <button class="red" onclick="resetSettings()">恢复默认</button>
+    </div>
+  </section>
+
+  <section id="page-help" class="hidden">
+    <div class="card">
+      <h2 style="font-size:18px;margin:0 0 8px">能自动识别的写法</h2>
+      <div class="code">06 05 16 17 11 22 21 各150
+特码蓝波各数350
+特码鼠猴龙羊鸡各数100，猪各数300
+17 05 41 29 11 01 33 09 06 47 十不中3000
+猪鸡鼠马龙复三连各300，复四200，五连200
+二中二马拖龙各200
+某一行后面可以写：反水1.5% / 回水2 / 水0.8</div>
+      <p class="mini">规则没有写进去的玩法会显示“未识别”，不会乱算。后面要加新玩法，把例子发给我，我再加。</p>
+    </div>
+  </section>
+
+  <section id="page-history" class="hidden">
+    <div class="card">
+      <h2 style="font-size:18px;margin:0 0 8px">历史记录</h2>
+      <div id="historyBox"></div>
+      <button class="red" onclick="clearHistory()">清空历史</button>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs">
+  <div class="tab active" onclick="showPage('calc',this)">核算</div>
+  <div class="tab" onclick="showPage('settings',this)">设置</div>
+  <div class="tab" onclick="showPage('help',this)">说明</div>
+  <div class="tab" onclick="showPage('history',this)">历史</div>
+</nav>
+
+<script>
+const zodiac = {
+  "鼠":["07","19","31","43"], "牛":["06","18","30","42"], "虎":["05","17","29","41"],
+  "兔":["04","16","28","40"], "龙":["03","15","27","39"], "蛇":["02","14","26","38"],
+  "马":["01","13","25","37","49"], "羊":["12","24","36","48"], "猴":["11","23","35","47"],
+  "鸡":["10","22","34","46"], "狗":["09","21","33","45"], "猪":["08","20","32","44"]
+};
+const red = ["01","02","07","08","12","13","18","19","23","24","29","30","34","35","40","45","46"];
+const blue = ["03","04","09","10","14","15","20","25","26","31","36","37","41","42","47","48"];
+const green = ["05","06","11","16","17","21","22","27","28","32","33","38","39","43","44","49"];
+let lastResult=null;
+
+function pad(n){ n=String(n).replace(/\D/g,""); return n ? n.padStart(2,"0") : ""; }
+function numsFrom(s){ return (s.match(/\d{1,2}/g)||[]).map(pad).filter(x=>+x>=1 && +x<=49); }
+function colorOf(n){ if(red.includes(n))return "红波"; if(blue.includes(n))return "蓝波"; if(green.includes(n))return "绿波"; return ""; }
+function sxOf(n){ for(const [sx, arr] of Object.entries(zodiac)){ if(arr.includes(n)) return sx; } return ""; }
+function comb(arr,k){ let res=[]; function rec(start,path){ if(path.length===k){res.push(path.slice());return;} for(let i=start;i<arr.length;i++)rec(i+1,path.concat(arr[i])); } rec(0,[]); return res; }
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function money(x){return Number(x)||0}
+function fmt(x){return Math.round((Number(x)||0)*100)/100}
+function pay(stake, odds, settings){ return settings.payoutMode==="profitOnly" ? stake*odds + stake : stake*odds; }
+function csvEscape(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function downloadText(filename,text,type='text/plain'){const blob=new Blob([text],{type:type+';charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
+
+function getSettings(){
+  const ids=["oddsTema","oddsColor","oddsTeSx","oddsTenNo","odds2in2","odds3x","odds4x","odds5x","rebateTema","rebateColor","rebateSx","rebateTenNo","rebate2in2","rebate3x","rebate4x","rebate5x","rebateOther"];
+  let s={}; ids.forEach(id=>s[id]=money(document.getElementById(id).value));
+  ["payoutMode","rebateMode","colorMode","sxMode","tenNoRange","comboRange"].forEach(id=>s[id]=document.getElementById(id).value);
+  return s;
+}
+function saveSettings(){
+  const s=getSettings(); localStorage.setItem("lhc_auto_parse_settings",JSON.stringify(s)); alert("已保存");
+}
+function loadSettings(){
+  const s=JSON.parse(localStorage.getItem("lhc_auto_parse_settings")||"{}");
+  Object.entries(s).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;});
+}
+function resetSettings(){
+  localStorage.removeItem("lhc_auto_parse_settings"); location.reload();
+}
+function overrideRebate(line){ let m=line.match(/(?:反水|回水|水)\s*(\d+(?:\.\d+)?)\s*%?/); return m?Number(m[1]):null; }
+function defaultRebateByType(type, s){
+  if(type==="特码单号") return s.rebateTema;
+  if(type==="特码波色各数" || type==="特码波色") return s.rebateColor;
+  if(type==="生肖各数" || type==="特肖") return s.rebateSx;
+  if(type==="十不中") return s.rebateTenNo;
+  if(type==="二中二拖") return s.rebate2in2;
+  if(type==="三连肖") return s.rebate3x;
+  if(type==="四连肖") return s.rebate4x;
+  if(type==="五连肖") return s.rebate5x;
+  return s.rebateOther;
+}
+function parseOpen(s){
+  let parts=s.replace(/＋/g,"+").split("+");
+  let all=numsFrom(s);
+  let tema=parts.length>1?numsFrom(parts[1])[0]:all[all.length-1];
+  let ping=parts.length>1?numsFrom(parts[0]).slice(0,6):all.slice(0,6);
+  return {ping,tema,seven:ping.concat(tema?[tema]:[])};
+}
+function addRow(rows,type,content,unit,count,amount,checkFn,line,s,raw){
+  const ov=overrideRebate(line||"");
+  rows.push({type,content,unit:money(unit),count:money(count),amount:money(amount),rebateRate:ov!==null?ov:defaultRebateByType(type,s),checkFn,raw:raw||line});
+}
+function splitLines(text){
+  return String(text||"").replace(/\r/g,"\n").split(/\n+/).map(x=>x.trim()).filter(Boolean);
+}
+function parseBets(text,s){
+  let rows=[];
+  for(let raw of splitLines(text)){
+    let line=raw.replace(/[，,]/g,",").replace(/＋/g,"+").trim();
+    if(!line) continue;
+
+    let drag=line.match(/二中二\s*([鼠牛虎兔龙蛇马羊猴鸡狗猪])拖([鼠牛虎兔龙蛇马羊猴鸡狗猪]).*?各\s*(\d+)/);
+    if(drag){
+      let a=drag[1],b=drag[2],unit=money(drag[3]),count=zodiac[a].length*zodiac[b].length;
+      addRow(rows,"二中二拖",`${a}拖${b}`,unit,count,unit*count,(open,st)=>{
+        let pool=st.comboRange==="ping"?open.ping:open.seven,wins=0,details=[];
+        for(const x of zodiac[a])for(const y of zodiac[b])if(pool.includes(x)&&pool.includes(y)){wins++;details.push(`${x}-${y}`);}
+        return {hit:wins>0,detail:details.join("、")||"未中",payout:wins*pay(unit,st.odds2in2,st),formula:wins?`${unit}×${st.odds2in2}×${wins}组`:"0",winningStake:wins*unit};
+      },line,s,raw); continue;
+    }
+
+    let sxList=(line.match(/[鼠牛虎兔龙蛇马羊猴鸡狗猪]/g)||[]);
+    let uniqueSx=[...new Set(sxList)];
+    if(uniqueSx.length>=3 && (line.includes("三连")||line.includes("复三")||line.includes("复四")||line.includes("四连")||line.includes("五连"))){
+      let m3=line.match(/(?:复三连|三连肖|三连).*?各?\s*(\d+)/);
+      if(m3){ let unit=money(m3[1]),groups=comb(uniqueSx,3);
+        addRow(rows,"三连肖",uniqueSx.join(""),unit,groups.length,unit*groups.length,(open,st)=>{
+          let pool=st.comboRange==="ping"?open.ping:open.seven,openSx=[...new Set(pool.map(sxOf))],wins=groups.filter(g=>g.every(x=>openSx.includes(x)));
+          return {hit:wins.length>0,detail:wins.map(g=>g.join("")).join("、")||"未中",payout:wins.length*pay(unit,st.odds3x,st),formula:wins.length?`${unit}×${st.odds3x}×${wins.length}组`:"0",winningStake:wins.length*unit};
+        },line,s,raw);
+      }
+      let m4=line.match(/(?:复四|四连肖|四连).*?各?\s*(\d+)/);
+      if(m4){ let unit=money(m4[1]),groups=comb(uniqueSx,4);
+        addRow(rows,"四连肖",uniqueSx.join(""),unit,groups.length,unit*groups.length,(open,st)=>{
+          let pool=st.comboRange==="ping"?open.ping:open.seven,openSx=[...new Set(pool.map(sxOf))],wins=groups.filter(g=>g.every(x=>openSx.includes(x)));
+          return {hit:wins.length>0,detail:wins.map(g=>g.join("")).join("、")||"未中",payout:wins.length*pay(unit,st.odds4x,st),formula:wins.length?`${unit}×${st.odds4x}×${wins.length}组`:"0",winningStake:wins.length*unit};
+        },line,s,raw);
+      }
+      let m5=line.match(/(?:五连肖|五连).*?各?\s*(\d+)/);
+      if(m5){ let unit=money(m5[1]),groups=comb(uniqueSx,5);
+        addRow(rows,"五连肖",uniqueSx.join(""),unit,groups.length,unit*groups.length,(open,st)=>{
+          let pool=st.comboRange==="ping"?open.ping:open.seven,openSx=[...new Set(pool.map(sxOf))],wins=groups.filter(g=>g.every(x=>openSx.includes(x)));
+          return {hit:wins.length>0,detail:wins.map(g=>g.join("")).join("、")||"未中",payout:wins.length*pay(unit,st.odds5x,st),formula:wins.length?`${unit}×${st.odds5x}×${wins.length}组`:"0",winningStake:wins.length*unit};
+        },line,s,raw);
+      }
+      continue;
+    }
+
+    if(line.includes("十不中")){
+      let ns=numsFrom(line).slice(0,10),m=line.match(/十不中\s*(\d+)/),unit=m?money(m[1]):0;
+      addRow(rows,"十不中",ns.join("/"),unit,1,unit,(open,st)=>{
+        let pool=st.tenNoRange==="tema"?[open.tema]:open.seven,hitNums=ns.filter(n=>pool.includes(n)),hit=hitNums.length===0;
+        return {hit,detail:hit?"未开出所选号码":"开出："+hitNums.join("、"),payout:hit?pay(unit,st.oddsTenNo,st):0,formula:hit?`${unit}×${st.oddsTenNo}`:"0",winningStake:hit?unit:0};
+      },line,s,raw); continue;
+    }
+
+    let colorMatch=line.match(/特码?\s*(红波|蓝波|绿波).*?(?:各数|各)\s*(\d+)/);
+    if(colorMatch){
+      let c=colorMatch[1],unit=money(colorMatch[2]),arr=c==="红波"?red:(c==="蓝波"?blue:green);
+      if(s.colorMode==="singleColor"){
+        addRow(rows,"特码波色",c,unit,1,unit,(open,st)=>{
+          let hit=colorOf(open.tema)===c; return {hit,detail:hit?`特码${open.tema} ${c}`:"未中",payout:hit?pay(unit,st.oddsColor,st):0,formula:hit?`${unit}×${st.oddsColor}`:"0",winningStake:hit?unit:0};
+        },line,s,raw);
+      }else{
+        addRow(rows,"特码波色各数",`${c}(${arr.join("/")})`,unit,arr.length,unit*arr.length,(open,st)=>{
+          let hit=arr.includes(open.tema); return {hit,detail:hit?`特码${open.tema} ${c}`:"未中",payout:hit?pay(unit,st.oddsTema,st):0,formula:hit?`${unit}×${st.oddsTema}`:"0",winningStake:hit?unit:0};
+        },line,s,raw);
+      }
+      continue;
+    }
+
+    if(line.includes("各数") && /[鼠牛虎兔龙蛇马羊猴鸡狗猪]/.test(line)){
+      for(const ch of line.split(",")){
+        let msx=(ch.match(/[鼠牛虎兔龙蛇马羊猴鸡狗猪]/g)||[]), mm=ch.match(/各数\s*(\d+)|各\s*(\d+)/);
+        if(msx.length && mm){
+          let unit=money(mm[1]||mm[2]),nums=msx.flatMap(x=>zodiac[x]);
+          if(s.sxMode==="teSx"){
+            addRow(rows,"特肖",msx.join(""),unit,msx.length,unit*msx.length,(open,st)=>{
+              let hit=msx.includes(sxOf(open.tema));return {hit,detail:hit?`特码${open.tema} ${sxOf(open.tema)}`:"未中",payout:hit?pay(unit,st.oddsTeSx,st):0,formula:hit?`${unit}×${st.oddsTeSx}`:"0",winningStake:hit?unit:0};
+            },line,s,raw);
+          }else{
+            addRow(rows,"生肖各数",`${msx.join("")}=${nums.join("/")}`,unit,nums.length,unit*nums.length,(open,st)=>{
+              let hit=nums.includes(open.tema);return {hit,detail:hit?`特码${open.tema} ${sxOf(open.tema)}`:"未中",payout:hit?pay(unit,st.oddsTema,st):0,formula:hit?`${unit}×${st.oddsTema}`:"0",winningStake:hit?unit:0};
+            },line,s,raw);
+          }
+        }
+      }
+      continue;
+    }
+
+    let mm=line.match(/各\s*(\d+)/);
+    if(mm){
+      let unit=money(mm[1]),ns=numsFrom(line);
+      addRow(rows,"特码单号",ns.join("/"),unit,ns.length,unit*ns.length,(open,st)=>{
+        let hit=ns.includes(open.tema);return {hit,detail:hit?`特码${open.tema}`:"未中",payout:hit?pay(unit,st.oddsTema,st):0,formula:hit?`${unit}×${st.oddsTema}`:"0",winningStake:hit?unit:0};
+      },line,s,raw); continue;
+    }
+
+    addRow(rows,"未识别",raw,0,0,0,()=>({hit:false,detail:"未识别，未参与计算",payout:0,formula:"0",winningStake:0}),line,s,raw);
+  }
+  return rows;
+}
+function calc(){
+  const s=getSettings(),open=parseOpen(document.getElementById("openText").value),rows=parseBets(document.getElementById("betText").value,s);
+  let total=rows.reduce((a,r)=>a+r.amount,0),payout=0,rebateTotal=0,checked=[];
+  for(const r of rows){
+    let w=r.checkFn(open,s);
+    let base=s.rebateMode==="losingStake"?Math.max(0,r.amount-(w.winningStake||0)):r.amount;
+    let rebate=base*(r.rebateRate||0)/100;
+    payout+=w.payout||0; rebateTotal+=rebate;
+    checked.push({r,w,rebate,net:(w.payout||0)+rebate-r.amount});
+  }
+  const net=payout+rebateTotal-total;
+  lastResult={time:new Date().toLocaleString(),openText:document.getElementById("openText").value,total,payout,rebateTotal,net,checked};
+  renderResult(lastResult,open);
+  saveHistory(lastResult);
+}
+function renderResult(res,open){
+  const el=document.getElementById("result"); el.classList.remove("hidden");
+  const unknown=res.checked.filter(x=>x.r.type==="未识别").length;
+  el.innerHTML=`<h2 style="font-size:18px;margin:0 0 10px">核算结果</h2>
+  <p class="mini">平码：${open.ping.join(" ")}　特码：${open.tema||""}　生肖：${sxOf(open.tema)||""}　波色：${colorOf(open.tema)||""}</p>
+  <div class="kpis">
+    <div class="kpi"><span>总下注</span><b>${fmt(res.total)}</b></div>
+    <div class="kpi"><span>总派彩</span><b>${fmt(res.payout)}</b></div>
+    <div class="kpi"><span>总反水</span><b>${fmt(res.rebateTotal)}</b></div>
+    <div class="kpi"><span>最终输赢</span><b class="${res.net>=0?'win':'lose'}">${res.net>=0?'+':''}${fmt(res.net)}</b></div>
+  </div>
+  ${unknown?`<p><span class="badge warn">有${unknown}行未识别，未参与计算</span></p>`:""}
+  <h3>下注整理</h3>
+  <div class="scroll"><table><tr><th>原文</th><th>玩法</th><th>内容</th><th>单注</th><th>个数/组数</th><th>投注额</th><th>反水%</th></tr>
+  ${res.checked.map(x=>`<tr><td>${escapeHtml(x.r.raw)}</td><td>${x.r.type}</td><td>${escapeHtml(x.r.content)}</td><td>${x.r.unit}</td><td>${x.r.count}</td><td>${fmt(x.r.amount)}</td><td>${x.r.rebateRate}</td></tr>`).join("")}</table></div>
+  <h3>中奖明细</h3>
+  <div class="scroll"><table><tr><th>玩法</th><th>中/不中</th><th>中奖内容</th><th>计算</th><th>派彩</th><th>反水</th><th>本行结果</th></tr>
+  ${res.checked.map(x=>`<tr><td>${x.r.type}</td><td>${x.w.hit?'<span class="badge hit">中</span>':'<span class="badge miss">不中</span>'}</td><td>${escapeHtml(x.w.detail)}</td><td>${escapeHtml(x.w.formula)}</td><td>${fmt(x.w.payout)}</td><td>${fmt(x.rebate)}</td><td class="${x.net>=0?'win':'lose'}">${x.net>=0?'+':''}${fmt(x.net)}</td></tr>`).join("")}</table></div>`;
+  el.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function safeCalc(){try{calc()}catch(e){let el=document.getElementById("result");el.classList.remove("hidden");el.innerHTML=`<h2 class="lose">计算出错</h2><pre>${escapeHtml(e.stack||e)}</pre>`;}}
+function loadTextFile(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{document.getElementById("betText").value=reader.result;};
+  reader.onerror=()=>alert("文件读取失败");
+  reader.readAsText(file,"utf-8");
+}
+function clearAll(){document.getElementById("betText").value="";document.getElementById("openText").value="";document.getElementById("result").classList.add("hidden");}
+function exportResultCSV(){
+  if(!lastResult){alert("请先计算一次");return;}
+  let rows=[["原文","玩法","内容","单注","个数/组数","投注额","反水%","是否中","中奖内容","计算","派彩","反水","本行结果"]];
+  lastResult.checked.forEach(x=>rows.push([x.r.raw,x.r.type,x.r.content,x.r.unit,x.r.count,fmt(x.r.amount),x.r.rebateRate,x.w.hit?"中":"不中",x.w.detail,x.w.formula,fmt(x.w.payout),fmt(x.rebate),fmt(x.net)]));
+  rows.push([]);
+  rows.push(["汇总","","","","",fmt(lastResult.total),"","","","",fmt(lastResult.payout),fmt(lastResult.rebateTotal),fmt(lastResult.net)]);
+  downloadText("下注单自动核算结果.csv",rows.map(r=>r.map(csvEscape).join(",")).join("\n"),"text/csv");
+}
+function saveHistory(r){
+  let h=JSON.parse(localStorage.getItem("lhc_auto_parse_history")||"[]");
+  h.unshift({time:r.time,total:r.total,payout:r.payout,rebateTotal:r.rebateTotal,net:r.net,openText:r.openText});
+  h=h.slice(0,80); localStorage.setItem("lhc_auto_parse_history",JSON.stringify(h)); renderHistory();
+}
+function renderHistory(){
+  const h=JSON.parse(localStorage.getItem("lhc_auto_parse_history")||"[]");
+  document.getElementById("historyBox").innerHTML=h.length?h.map(x=>`<div class="historyItem"><b>${x.time}</b><p>开奖号：${escapeHtml(x.openText)}</p><p>下注：${fmt(x.total)}　派彩：${fmt(x.payout)}　反水：${fmt(x.rebateTotal)}</p><p>净输赢：<b class="${x.net>=0?'win':'lose'}">${x.net>=0?'+':''}${fmt(x.net)}</b></p></div>`).join(""):"<p class='mini'>暂无历史</p>";
+}
+function clearHistory(){if(confirm("确定清空历史？")){localStorage.removeItem("lhc_auto_parse_history");renderHistory();}}
+function showPage(name,tab){
+  ["calc","settings","help","history"].forEach(x=>document.getElementById("page-"+x).classList.toggle("hidden",x!==name));
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active");
+  if(name==="history")renderHistory();
+}
+loadSettings(); renderHistory();
+if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(()=>{});}
+</script>
+</body>
+</html>
