@@ -1,10 +1,10 @@
 {
-  "name": "下注单自动核算APP",
-  "short_name": "自动核算",
+  "name": "下注单核算APP",
+  "short_name": "核算APP",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#7c2d12",
+  "background_color": "#f3f4f6",
+  "theme_color": "#1f2937",
   "icons": [
     {
       "src": "icon-192.png",
